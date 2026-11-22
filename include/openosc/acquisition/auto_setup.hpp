@@ -16,7 +16,19 @@ public:
     const ScopeRequest &request() const { return trial_; }
     const ScopeRequest &original() const { return original_; }
 private:
-    bool vertical(const FrameView &frame,SignalSummary (&summary)[2],uint8_t &usable);
+    // reversed: a channel's range moved against its previous move in this search (direction_).
+    bool vertical(const FrameView &frame,SignalSummary (&summary)[2],uint8_t &usable,bool &reversed);
+    // The direction of each channel's last range move since the search or the window last changed
+    // (+1 coarser, -1 finer, 0 none). A trial record shorter than a slow signal's variation sees a
+    // different part of it each time (a half sine's flat half, then its hump): the range follows
+    // each one, finer on the quiet part and coarser on the clipped one, and never settles (4 Hz at
+    // 1 ms/div ran out of attempts between 20 and 40 mV/div, ZT706S 2026-11-22). A move against the
+    // previous one is that disagreement: observe() then widens the window as well.
+    int8_t direction_[2]{};
+    // A ten times longer window (Timebases), at most LongestTimebaseNs, for a signal slower than the
+    // record; the caller checks the timebase is below it. changed()'s result.
+    static constexpr uint64_t LongestTimebaseNs=20000000000ULL;
+    bool widen(uint32_t now);
     // Edges of a channel within its band, and the period most of them agree on (if any).
     struct Periodicity { uint32_t edges=0; double hertz=0; bool coherent=false; };
     // Edges without a period from this many on are noise or an aperiodic signal; fewer, a signal
