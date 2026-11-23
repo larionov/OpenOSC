@@ -21,7 +21,7 @@ void AutoSetup::begin(const ScopeRequest &request,unsigned channel,uint32_t now)
         trial_.frontend.position[c]=80;
     }
     state_=State::Searching; attempts_=0; hasSequence_=timing_=verified_=provisional_=counterRejected_=false;
-    direction_[0]=direction_[1]=0;
+    forgetRangeMoves();
     counterWait_=CounterWait::None;
     totalDeadline_=now+600000;
     changed(now);
@@ -52,17 +52,10 @@ bool AutoSetup::observe(const FrameView &frame,uint32_t now,const CounterSnapsho
             metadata.channels[c].coupling!=trial_.frontend.coupling[c]) return false;
     }
     sequence_=metadata.sequence; hasSequence_=true;
-    SignalSummary summaries[2]; uint8_t usable=0; bool reversed=false;
-    if (vertical(frame,summaries,usable,reversed)) {
+    SignalSummary summaries[2]; uint8_t usable=0; bool rangeReversed=false;
+    if (vertical(frame,summaries,usable,rangeReversed)) {
         timing_=false;
-        // The records disagree (direction_): a signal slower than the record. The new range stands
-        // (this record's evidence) and the window is ten times longer, as for a record under two edges.
-        if (reversed && trial_.timebaseNs<LongestTimebaseNs) {
-            direction_[0]=direction_[1]=0;
-            provisional_=false; // FCNT's timebase, if taken, is superseded by the longer window.
-            return widen(now);
-        }
-        return changed(now);
+        return rangeReversed && canWiden() ? widenTenfold(now) : changed(now);
     }
     if (!active()) return false;
     if (!usable) { state_=State::NoSignal; return false; }

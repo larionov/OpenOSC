@@ -9,11 +9,11 @@ uint64_t AutoSetup::timebaseFor(double hertz) {
     for (auto value:Timebases::Values) if (value>=target) return value;
     return Timebases::Values[sizeof(Timebases::Values)/sizeof(*Timebases::Values)-1];
 }
-bool AutoSetup::widen(uint32_t now) {
+bool AutoSetup::widenTenfold(uint32_t now) {
     const uint64_t target=trial_.timebaseNs*10;
     uint64_t next=LongestTimebaseNs;
     for (auto value:Timebases::Values) if (value>=target) { next=value; break; }
-    trial_.timebaseNs=next; verified_=false;
+    setTimebase(next); provisional_=false;
     return changed(now);
 }
 bool AutoSetup::timing(const SignalBand &band,const Periodicity &raw,double sampleRate,uint32_t now,const CounterSnapshot *counters) {
@@ -28,7 +28,7 @@ bool AutoSetup::timing(const SignalBand &band,const Periodicity &raw,double samp
         provisional_=false;
         if (!raw.coherent) {
             counterRejected_=true;
-            if (trial_.timebaseNs!=fallbackTimebase_) { trial_.timebaseNs=fallbackTimebase_; verified_=false; return changed(now); }
+            if (trial_.timebaseNs!=fallbackTimebase_) { setTimebase(fallbackTimebase_); return changed(now); }
         }
     }
     if (counters && !counterRejected_) {
@@ -61,7 +61,7 @@ bool AutoSetup::timing(const SignalBand &band,const Periodicity &raw,double samp
                 const uint64_t next=timebaseFor(hardware.hertz);
                 if (next!=trial_.timebaseNs) {
                     provisional_=true; fallbackTimebase_=trial_.timebaseNs;
-                    trial_.timebaseNs=next; verified_=false;
+                    setTimebase(next);
                     return changed(now);
                 }
                 counterRejected_=true; // This record is at FCNT's timebase and shows no period.
@@ -70,11 +70,11 @@ bool AutoSetup::timing(const SignalBand &band,const Periodicity &raw,double samp
     }
     if (frequency>0 && std::isfinite(frequency)) {
         const uint64_t next=timebaseFor(frequency);
-        if (next!=trial_.timebaseNs) { trial_.timebaseNs=next; verified_=false; return changed(now); }
-    } else if (band.high-band.low>=4 && raw.edges<2 && trial_.timebaseNs<LongestTimebaseNs) {
+        if (next!=trial_.timebaseNs) { setTimebase(next); return changed(now); }
+    } else if (band.high-band.low>=4 && raw.edges<2 && canWiden()) {
         // Under two edges in the record: a slower signal, looked for in a ten times longer window.
         // Edges without a period (noise, an aperiodic signal) keep this timebase.
-        return widen(now);
+        return widenTenfold(now);
     }
     // The level was set on an earlier record, possibly at another timebase: checked once on this
     // one, and moved (one more trial) if the middle of its band is elsewhere.
