@@ -3,7 +3,8 @@
 #include <cmath>
 
 namespace openosc::scope {
-bool AutoSetup::vertical(const FrameView &frame,SignalSummary (&summaries)[2],uint8_t &usable) {
+bool AutoSetup::vertical(const FrameView &frame,SignalSummary (&summaries)[2],uint8_t &usable,bool &rangeReversed) {
+    const unsigned before[2]={unsigned(trial_.frontend.range[0]),unsigned(trial_.frontend.range[1])};
     bool change=false;
     uint8_t clipped=0;
     for (unsigned c=0;c<2;++c) {
@@ -36,6 +37,12 @@ bool AutoSetup::vertical(const FrameView &frame,SignalSummary (&summaries)[2],ui
         if (divisions>=1.8 && divisions<=3.5) continue;
         const unsigned next=rangeFor(peakMillivolts);
         if (next!=range) { range=next; change=true; }
+    }
+    for (unsigned c=0;c<2;++c) {
+        if (trial_.frontend.range[c]==before[c]) continue;
+        const auto move=trial_.frontend.range[c]>before[c] ? RangeMove::Coarser : RangeMove::Finer;
+        if (lastMove_[c]!=RangeMove::None && lastMove_[c]!=move) rangeReversed=true;
+        lastMove_[c]=move;
     }
     if (!change && clipped && !usable) state_=State::Clipped;
     return change;

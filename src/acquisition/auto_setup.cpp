@@ -21,6 +21,7 @@ void AutoSetup::begin(const ScopeRequest &request,unsigned channel,uint32_t now)
         trial_.frontend.position[c]=80;
     }
     state_=State::Searching; attempts_=0; hasSequence_=timing_=verified_=provisional_=counterRejected_=false;
+    forgetRangeMoves();
     counterWait_=CounterWait::None;
     totalDeadline_=now+600000;
     changed(now);
@@ -51,8 +52,11 @@ bool AutoSetup::observe(const FrameView &frame,uint32_t now,const CounterSnapsho
             metadata.channels[c].coupling!=trial_.frontend.coupling[c]) return false;
     }
     sequence_=metadata.sequence; hasSequence_=true;
-    SignalSummary summaries[2]; uint8_t usable=0;
-    if (vertical(frame,summaries,usable)) { timing_=false; return changed(now); }
+    SignalSummary summaries[2]; uint8_t usable=0; bool rangeReversed=false;
+    if (vertical(frame,summaries,usable,rangeReversed)) {
+        timing_=false;
+        return rangeReversed && canWiden() ? widenTenfold(now) : changed(now);
+    }
     if (!active()) return false;
     if (!usable) { state_=State::NoSignal; return false; }
     // The level and the edge bands come from the bulk of the codes: one spike must not lift the

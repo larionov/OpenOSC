@@ -1,6 +1,7 @@
 #pragma once
 #include "openosc/acquisition/request.hpp"
 #include "openosc/acquisition/counter_window.hpp"
+#include "openosc/acquisition/timebases.hpp"
 
 namespace openosc::scope {
 class AutoSetup {
@@ -16,7 +17,18 @@ public:
     const ScopeRequest &request() const { return trial_; }
     const ScopeRequest &original() const { return original_; }
 private:
-    bool vertical(const FrameView &frame,SignalSummary (&summary)[2],uint8_t &usable);
+    bool vertical(const FrameView &frame,SignalSummary (&summary)[2],uint8_t &usable,bool &rangeReversed);
+    enum class RangeMove : int8_t { None, Finer, Coarser };
+    // A record shorter than a slow signal's variation shows a different part of it each time (a half
+    // sine's flat half, then its hump): the range goes finer on one and coarser on the next and never
+    // settles (4 Hz at 1 ms/div ran out of attempts, ZT706S 2026-11-22). A range move against the
+    // channel's previous one therefore widens the window too.
+    RangeMove lastMove_[2]{};
+    void forgetRangeMoves() { lastMove_[0]=lastMove_[1]=RangeMove::None; }
+    void setTimebase(uint64_t timebaseNs) { trial_.timebaseNs=timebaseNs; verified_=false; forgetRangeMoves(); }
+    static constexpr uint64_t LongestTimebaseNs=Timebases::Values[sizeof Timebases::Values/sizeof *Timebases::Values-1];
+    bool canWiden() const { return trial_.timebaseNs<LongestTimebaseNs; }
+    bool widenTenfold(uint32_t now);
     // Edges of a channel within its band, and the period most of them agree on (if any).
     struct Periodicity { uint32_t edges=0; double hertz=0; bool coherent=false; };
     // Edges without a period from this many on are noise or an aperiodic signal; fewer, a signal
